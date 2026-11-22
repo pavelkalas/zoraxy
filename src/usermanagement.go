@@ -80,6 +80,12 @@ func handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//Přiřaď uživateli konkrétní proxy domény (pokud jsou poslané).
+	if err := authAgent.SetUserDomains(username, parseDomains(r)); err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
 	authAgent.Logger.PrintAndLog("auth", "Admin created user "+username, nil)
 	utils.SendOK(w)
 }
@@ -136,6 +142,14 @@ func handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 		_ = authAgent.SetUserMustChangePassword(username, must)
 	}
 
+	// Přiřazené proxy domény
+	if _, ok := r.Form["domains"]; ok {
+		if err := authAgent.SetUserDomains(username, parseDomains(r)); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+	}
+
 	utils.SendOK(w)
 }
 
@@ -177,6 +191,24 @@ func handleRolesList(w http.ResponseWriter, r *http.Request) {
 	}
 	js, _ := json.Marshal(roles)
 	utils.SendJSONResponse(w, string(js))
+}
+
+// parseDomains přečte seznam proxy domén z POST parametru "domains"
+// (čárkou oddělený seznam). Prázdné hodnoty se vynechají.
+func parseDomains(r *http.Request) []string {
+	raw := r.FormValue("domains")
+	if raw == "" {
+		return []string{}
+	}
+	parts := strings.Split(raw, ",")
+	out := []string{}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // parsePermissions přečte oprávnění z POST parametru "permissions", který

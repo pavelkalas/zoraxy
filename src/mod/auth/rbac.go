@@ -72,10 +72,11 @@ type Role struct {
 
 // UserInfo je datová struktura, kterou vracíme do UI pro seznam uživatelů.
 type UserInfo struct {
-	Username           string `json:"username"`
-	Email              string `json:"email"`
-	Role               string `json:"role"`
-	MustChangePassword bool   `json:"mustChangePassword"`
+	Username           string   `json:"username"`
+	Email              string   `json:"email"`
+	Role               string   `json:"role"`
+	MustChangePassword bool     `json:"mustChangePassword"`
+	Domains            []string `json:"domains"` // konkrétní proxy domény, ke kterým má uživatel přístup
 }
 
 func (a *AuthAgent) roleKey(name string) string {
@@ -413,8 +414,8 @@ func (a *AuthAgent) PermissionForPath(path string) string {
 	return ""
 }
 
-// ListUserObjects vrátí seznam uživatelů včetně role, emailu a flagu
-// "musí si změnit heslo" pro vykreslení v UI.
+// ListUserObjects vrátí seznam uživatelů včetně role, emailu, flagu
+// "musí si změnit heslo" a přiřazených domén pro vykreslení v UI.
 func (a *AuthAgent) ListUserObjects() []UserInfo {
 	results := []UserInfo{}
 	for _, username := range a.ListUsers() {
@@ -425,9 +426,39 @@ func (a *AuthAgent) ListUserObjects() []UserInfo {
 			Email:              email,
 			Role:               a.GetUserRole(username),
 			MustChangePassword: a.GetUserMustChangePassword(username),
+			Domains:            a.GetUserDomains(username),
 		})
 	}
 	return results
+}
+
+// GetUserDomains vrátí seznam proxy domén, které má uživatel přiřazené.
+// Admin má vždycky přístup ke všem doménám bez ohledu na tenhle seznam.
+func (a *AuthAgent) GetUserDomains(username string) []string {
+	domains := []string{}
+	if err := a.Database.Read("auth", "domains/"+username, &domains); err != nil {
+		return []string{}
+	}
+	return domains
+}
+
+// SetUserDomains uloží seznam proxy domén pro daného uživatele.
+func (a *AuthAgent) SetUserDomains(username string, domains []string) error {
+	return a.Database.Write("auth", "domains/"+username, domains)
+}
+
+// UserCanAccessDomain zjistí, jestli uživatel smí vidět / spravovat danou
+// proxy doménu. Admin má přístup vždy, ostatní jen k přiřazeným doménám.
+func (a *AuthAgent) UserCanAccessDomain(username, host string) bool {
+	if a.GetUserRole(username) == DefaultRoleName {
+		return true
+	}
+	for _, d := range a.GetUserDomains(username) {
+		if d == host {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateUserAccountFull vytvoří uživatele i s rolí a flagem povinné změny hesla.

@@ -282,6 +282,9 @@
                     <a class="item hrpedit_menu_item" cfgpage="tags">
                         <i class="tags icon"></i> <span class="editorSideMenuText">Tags</span>
                     </a>
+                    <a class="item hrpedit_menu_item" cfgpage="permissions" id="hrpPermissionsMenuItem">
+                        <i class="user shield icon"></i> <span class="editorSideMenuText">Permissions</span>
+                    </a>
                 </div>
 
                 <button class="ui basic fluid button httpProxyEditClosePC" onclick="closeHttpRuleEditor();">Close</button>
@@ -661,6 +664,17 @@
                         <iframe src="" class="wrapper_frame">
 
                         </iframe>
+                    </div>
+                    <!-- Permissions -->
+                    <div class="rpconfig_content" rpcfg="permissions">
+                        <div class="ui segment">
+                            <h3>Domain Permissions</h3>
+                            <p>Choose which users can see and manage this proxy domain. The admin always has access.</p>
+                            <div class="ui divider"></div>
+                            <div id="domainPermissionUserList" style="max-height:300px; overflow-y:auto;"></div>
+                            <div class="ui divider"></div>
+                            <button class="ui basic green button" onclick="saveDomainPermissions();"><i class="ui save icon"></i> Save Permissions</button>
+                        </div>
                     </div>
                 </div>
                 <!-- Editor Side Wrapper -->
@@ -2197,6 +2211,67 @@
         $(`#httprpEditModal .rpconfig_content[rpcfg='${cfgPageId}']`).show();
         $("#httprpEditModal .wrapper_frame").contents().scrollTop(0);
         hideEditorSideWrapper(); //Always close the side wrapper on tab change
+        if (cfgPageId === "permissions") {
+            loadDomainPermissions();
+        }
+    });
+
+    /* ============ Domain Permissions ============ */
+    function escapeHtml(value) {
+        return String(value || "")
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function currentEditingHost() {
+        var encoded = $("#httprpEditModal").attr("editing-host");
+        return encoded ? decodeURIComponent(encoded) : "";
+    }
+
+    function loadDomainPermissions() {
+        var host = currentEditingHost();
+        if (!host) return;
+        $("#domainPermissionUserList").html('<small>Loading users...</small>');
+        $.get("/api/proxy/domainPermissions?host=" + encodeURIComponent(host), function(data) {
+            if (!data || data.error !== undefined) {
+                $("#domainPermissionUserList").html('<small style="color:#db2828;">' + escapeHtml(data ? data.error : "Failed to load") + '</small>');
+                return;
+            }
+            var html = "";
+            data.forEach(function(u) {
+                var checked = u.hasAccess ? "checked" : "";
+                html += '<div class="field"><div class="ui checkbox">' +
+                    '<input type="checkbox" class="domainUserCheck" data-username="' + escapeHtml(u.username) + '" ' + checked + '>' +
+                    '<label>' + escapeHtml(u.username) + '</label></div></div>';
+            });
+            $("#domainPermissionUserList").html(html);
+            $("#domainPermissionUserList .ui.checkbox").checkbox();
+        });
+    }
+
+    function saveDomainPermissions() {
+        var host = currentEditingHost();
+        if (!host) return;
+        var users = [];
+        $("#domainPermissionUserList .domainUserCheck:checked").each(function() {
+            users.push($(this).attr("data-username"));
+        });
+        $.cjax({
+            url: "/api/proxy/domainPermissions",
+            method: "POST",
+            data: { host: host, users: users.join(",") },
+            success: function(data) {
+                if (data.error !== undefined) { msgbox(data.error, false); return; }
+                msgbox("Domain permissions updated");
+            }
+        });
+    }
+
+    //Skryj záložku Permissions uživatelům bez oprávnění spravovat uživatele (non-admin).
+    $.get("/api/auth/myPermissions", function(perms) {
+        if (Array.isArray(perms) && perms.indexOf("users") < 0) {
+            $("#hrpPermissionsMenuItem").hide();
+        }
     });
 
     $("#httprpEditModal .editor_back_button").on("click", function(event) {

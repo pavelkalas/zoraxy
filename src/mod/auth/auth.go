@@ -412,6 +412,7 @@ func (a *AuthAgent) UnregisterUser(username string) error {
 	a.Database.Delete("auth", "email/"+username)
 	a.Database.Delete("auth", "role/"+username)
 	a.Database.Delete("auth", "mustchangepw/"+username)
+	a.Database.Delete("auth", "domains/"+username)
 	return nil
 }
 

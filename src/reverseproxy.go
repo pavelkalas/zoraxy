@@ -697,6 +697,10 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !requireDomainAccess(w, r, rootNameOrMatchingDomain) {
+		return
+	}
+
 	useStickySession, _ := utils.PostBool(r, "ss")
 
 	//Load bypass TLS option
@@ -1114,6 +1118,10 @@ func DeleteProxyEndpoint(w http.ResponseWriter, r *http.Request) {
 	ep, err := utils.PostPara(r, "ep")
 	if err != nil {
 		utils.SendErrorResponse(w, "Invalid ep given")
+		return
+	}
+
+	if !requireDomainAccess(w, r, ep) {
 		return
 	}
 
@@ -1803,9 +1811,29 @@ func ReverseProxyList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if eptype == "host" {
+		//Načti domény, ke kterým má aktuální uživatel přístup. Admin vidí vše.
+		username, _ := authAgent.GetUsernameFromRequest(r)
+		isAdmin := authAgent.GetUserRole(username) == auth.DefaultRoleName
+		allowedDomains := authAgent.GetUserDomains(username)
+
 		results := []*dynamicproxy.ProxyEndpoint{}
 		dynamicProxyRouter.ProxyEndpoints.Range(func(key, value interface{}) bool {
 			thisEndpoint := dynamicproxy.CopyEndpoint(value.(*dynamicproxy.ProxyEndpoint))
+
+			//Odfiltruj domény, na které uživatel nemá oprávnění.
+			if !isAdmin {
+				allowed := false
+				for _, d := range allowedDomains {
+					if d == thisEndpoint.RootOrMatchingDomain {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					return true //přeskoč
+				}
+			}
+
 			//Clear the auth passwords before showing to front-end
 			cleanedCredentials := []*dynamicproxy.BasicAuthCredentials{}
 			for _, user := range thisEndpoint.AuthenticationProvider.BasicAuthCredentials {
