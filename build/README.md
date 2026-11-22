@@ -11,8 +11,15 @@ Build běží přes **WSL** (protože tam máš Docker), výsledek se uloží ja
 | Soubor      | K čemu slouží                                             |
 |-------------|-----------------------------------------------------------|
 | `build.bat` | Postaví image a uloží ho do `build/output/zoraxy-multi.tar` |
+| `Dockerfile`| Dockerfile **bez ZeroTieru** (používá ho `build.bat`)      |
 | `load.bat`  | Na cíli načte tar zpět do Dockeru (`docker load`)         |
 | `push.bat`  | (volitelné) pushne image do Docker registru               |
+
+> **Proč bez ZeroTieru?** Oficiální Dockerfile kompiluje ZeroTier (funkce
+> "Global Area Network"), což je zdaleka nejpomalejší část buildu (stahuje
+> zdroják a kompiluje celý C++/Rust projekt). Tenhle `build/Dockerfile` ho
+> vynechává, takže build je o mnoho minut rychlejší. **Pokud ZeroTier
+> nepoužíváš (env `ZEROTIER=false`), je to přesně to, co chceš.**
 
 ## Postup (nejjednodušší - přes tar)
 

@@ -10,6 +10,10 @@ REM  Postavi docker image z tveho upraveneho src/ a ulozi ho jako
 REM  tar do build/output/zoraxy-multi.tar. Build bezi pres WSL
 REM  (protoze tam mas docker), takze musis mit spusteny WSL + Docker.
 REM
+REM  Pouziva build/Dockerfile, ktery NESKACHA ZeroTier (takze build je
+REM  mnohem rychlejsi). ZeroTier v tomhle image nefunguje - pokud ho
+REM  potrebujes, pouzij oficialni docker/Dockerfile.
+REM
 REM  Vysledny tar pak na cili nahrajes:  docker load -i zoraxy-multi.tar
 REM  (nebo ho pushnes do registru, viz push.bat)
 REM ============================================================
@@ -32,7 +36,7 @@ echo.
 
 REM ---- 1) priprava build contextu -----------------------------
 echo  [1/3] Pripravuju build context (build\.context)...
-wsl --cd "%REPO%" -u root -- bash -lc "rm -rf build/.context && mkdir -p build/.context && cp -r src build/.context/src && cp docker/Dockerfile docker/entrypoint.go build/.context/"
+wsl --cd "%REPO%" -u root -- bash -lc "rm -rf build/.context && mkdir -p build/.context && cp -r src build/.context/src && cp build/Dockerfile docker/entrypoint.go build/.context/"
 if errorlevel 1 (
     echo   CHYBA: nepodarilo se pripravit build context.
     pause
