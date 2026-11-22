@@ -49,6 +49,13 @@ func NewAuthenticationAgent(sessionName string, key []byte, sysdb *db.Database, 
 		panic(err)
 	}
 
+	//Create the roles table used by the RBAC system
+	err = sysdb.NewTable(TableRoles)
+	if err != nil {
+		systemLogger.Println("Failed to create roles database. Terminating.")
+		panic(err)
+	}
+
 	//Create a new AuthAgent object
 	newAuthAgent := AuthAgent{
 		SessionName:             sessionName,
@@ -57,6 +64,11 @@ func NewAuthenticationAgent(sessionName string, key []byte, sysdb *db.Database, 
 		LoginRedirectionHandler: loginRedirectionHandler,
 		Logger:                  systemLogger,
 	}
+
+	//Zajisti, že existuje výchozí admin role a že stávající uživatelé
+	//mají doplněné role a flag "musí si změnit heslo".
+	newAuthAgent.ensureDefaultRole()
+	newAuthAgent.backfillExistingUsers()
 
 	//Return the authAgent
 	return &newAuthAgent
@@ -129,7 +141,14 @@ func (a *AuthAgent) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 		//Print the login message to console
 		a.Logger.PrintAndLog("auth", username+" logged in.", nil)
-		utils.SendOK(w)
+
+		//Pokud má uživatel nastavenou povinnou změnu hesla, řekni to klientovi,
+		//aby ho přesměroval na stránku pro změnu hesla.
+		if a.GetUserMustChangePassword(username) {
+			utils.SendJSONResponse(w, "{\"mustChangePassword\":true}")
+		} else {
+			utils.SendOK(w)
+		}
 	} else {
 		//Password incorrect
 		a.Logger.PrintAndLog("auth", username+" login request rejected: "+rejectionReason, nil)
@@ -391,6 +410,8 @@ func (a *AuthAgent) UnregisterUser(username string) error {
 	//OK! Remove the user from the database
 	a.Database.Delete("auth", "passhash/"+username)
 	a.Database.Delete("auth", "email/"+username)
+	a.Database.Delete("auth", "role/"+username)
+	a.Database.Delete("auth", "mustchangepw/"+username)
 	return nil
 }
 
@@ -453,28 +474,10 @@ func (a *AuthAgent) UpdateSessionExpireTime(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// Create user account
+// Create user account (zpětně kompatibilní obálka – vytvoří admina bez
+// povinné změny hesla). Pro plnou kontrolu použij CreateUserAccountFull.
 func (a *AuthAgent) CreateUserAccount(newusername string, password string, email string) error {
-	//Check user already exists
-	if a.UserExists(newusername) {
-		return errors.New("user with same name already exists")
-	}
-
-	key := newusername
-	hashedPassword := Hash(password)
-	err := a.Database.Write("auth", "passhash/"+key, hashedPassword)
-	if err != nil {
-		return err
-	}
-
-	if email != "" {
-		err = a.Database.Write("auth", "email/"+key, email)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return a.CreateUserAccountFull(newusername, password, email, DefaultRoleName, false)
 }
 
 // Hash the given raw string into sha512 hash

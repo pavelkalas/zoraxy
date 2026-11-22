@@ -25,6 +25,13 @@ func NewManagedHTTPRouter(option RouterOption) *RouterDef {
 	}
 }
 
+// denyWithJSON pošle klientovi JSON chybu se statusem 403.
+func denyWithJSON(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	w.Write([]byte("{\"error\":\"" + message + "\"}"))
+}
+
 func (router *RouterDef) HandleFunc(endpoint string, handler func(http.ResponseWriter, *http.Request)) error {
 	//Check if the endpoint already registered
 	if _, exist := router.endpoints[endpoint]; exist {
@@ -34,14 +41,37 @@ func (router *RouterDef) HandleFunc(endpoint string, handler func(http.ResponseW
 
 	authAgent := router.option.AuthAgent
 
+	//Obal handleru, který po úspěšném přihlášení ještě zkontroluje
+	//povinnou změnu hesla a oprávnění pro daný endpoint.
+	authenticatedHandler := func(w http.ResponseWriter, r *http.Request) {
+		//Pokud si uživatel ještě nezměnil heslo, nesmí na nic jiného než na
+		//endpointy pro změnu hesla / odhlášení.
+		if authAgent.MustChangePassword(r) && !authAgent.IsPasswordChangeAllowedEndpoint(endpoint) {
+			denyWithJSON(w, "password change required")
+			return
+		}
+
+		permission := authAgent.PermissionForPath(endpoint)
+		if permission == "" {
+			//Neznámý endpoint: dostane se k němu jen admin.
+			if !authAgent.IsAdmin(r) {
+				denyWithJSON(w, "insufficient permission")
+				return
+			}
+		} else if !authAgent.UserHasPermission(r, permission) {
+			denyWithJSON(w, "insufficient permission")
+			return
+		}
+
+		handler(w, r)
+	}
+
 	//OK. Register handler
 	if router.option.TargetMux == nil {
 		http.HandleFunc(endpoint, func(w http.ResponseWriter, r *http.Request) {
 			//Check authentication of the user
 			if router.option.RequireAuth {
-				authAgent.HandleCheckAuth(w, r, func(w http.ResponseWriter, r *http.Request) {
-					handler(w, r)
-				})
+				authAgent.HandleCheckAuth(w, r, authenticatedHandler)
 			} else {
 				handler(w, r)
 			}
@@ -51,9 +81,7 @@ func (router *RouterDef) HandleFunc(endpoint string, handler func(http.ResponseW
 		router.option.TargetMux.HandleFunc(endpoint, func(w http.ResponseWriter, r *http.Request) {
 			//Check authentication of the user
 			if router.option.RequireAuth {
-				authAgent.HandleCheckAuth(w, r, func(w http.ResponseWriter, r *http.Request) {
-					handler(w, r)
-				})
+				authAgent.HandleCheckAuth(w, r, authenticatedHandler)
 			} else {
 				handler(w, r)
 			}

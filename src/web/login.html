@@ -367,6 +367,9 @@
                     }else if(data.redirect !== undefined){
                         //LDAP Related Code
                         window.location.href = data.redirect;
+                    }else if(data.mustChangePassword === true){
+                        //User must change password before continuing
+                        window.location.href = "/changepassword.html";
                     }else{
                         //Login succeed
                         if (redirectionAddress == ""){

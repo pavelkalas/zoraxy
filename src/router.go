@@ -26,6 +26,7 @@ func FSHandler(handler http.Handler) http.Handler {
 			strings.HasPrefix(r.URL.Path, "/img/public/") ||
 			r.URL.Path == "/login.html" ||
 			r.URL.Path == "/reset.html" ||
+			r.URL.Path == "/changepassword.html" ||
 			r.URL.Path == "/favicon.png" {
 			if isHTMLFilePath(r.URL.Path) {
 				handleInjectHTML(w, r, r.URL.Path)
@@ -38,6 +39,13 @@ func FSHandler(handler http.Handler) http.Handler {
 		// Check authentication
 		if !authAgent.CheckAuth(r) && requireAuth {
 			http.Redirect(w, r, "/login.html", http.StatusTemporaryRedirect)
+			return
+		}
+
+		// Uživatel, který si ještě nezměnil heslo, smí jen na stránku pro
+		// změnu hesla (a na povolené API endpointy).
+		if authAgent.CheckAuth(r) && authAgent.MustChangePassword(r) && r.URL.Path != "/changepassword.html" {
+			http.Redirect(w, r, "/changepassword.html", http.StatusTemporaryRedirect)
 			return
 		}
 

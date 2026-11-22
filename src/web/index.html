@@ -194,6 +194,10 @@
                     <a class="item" tag="plugins">
                         <i class="simplistic puzzle piece icon"></i> Plugin Manager
                     </a>
+                    <!-- Users & Roles -->
+                    <a class="item" tag="users">
+                        <i class="simplistic users icon"></i> Users
+                    </a>
                     <!-- Installed Plugins -->
                     <cx id="pluginMenu">
                         <a class="item" style="pointer-events: none; user-select: none; opacity: 0.6;">
@@ -256,6 +260,9 @@
 
                 <!-- Plugins -->
                 <div id="plugins" class="functiontab" target="plugins.html"></div>
+
+                <!-- Users & Roles -->
+                <div id="users" class="functiontab" target="users.html"></div>
 
                 <!-- Up Time Monitor -->
                 <div id="utm" class="functiontab" target="uptime.html"></div>
@@ -456,6 +463,51 @@
                 });
             }
             initLogoutButtonState();
+
+            //Skryje položky menu podle oprávnění přihlášeného uživatele.
+            //Každá záložka má přiřazené oprávnění; admin vidí všechno.
+            var TAG_PERMISSIONS = {
+                "status": "status",
+                "globalsettings": "ingress",
+                "setroot": "ingress",
+                "httprp": "reverseproxy",
+                "vdir": "reverseproxy",
+                "rules": "reverseproxy",
+                "streamproxy": "reverseproxy",
+                "redirectset": "access",
+                "access": "access",
+                "trustproxy": "access",
+                "cert": "security",
+                "acme": "security",
+                "sso": "security",
+                "webserv": "services",
+                "utm": "services",
+                "networktool": "networking",
+                "iface": "networking",
+                "stats": "stats",
+                "utils": "utils",
+                "appstore": "appstore",
+                "plugins": "plugins",
+                "users": "users"
+            };
+
+            function applyPermissions(perms) {
+                var has = {};
+                (perms || []).forEach(function(p){ has[p] = true; });
+                $("#mainmenu a.item[tag]").each(function(){
+                    var tag = $(this).attr("tag");
+                    var perm = TAG_PERMISSIONS[tag];
+                    if (perm && !has[perm]) {
+                        $(this).hide();
+                    }
+                });
+            }
+
+            $.get("/api/auth/myPermissions", function(perms){
+                if (Array.isArray(perms)) {
+                    applyPermissions(perms);
+                }
+            });
 
             function logout() {
                 $.get("/api/auth/logout", function(response) {

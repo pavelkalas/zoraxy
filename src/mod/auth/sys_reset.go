@@ -46,6 +46,15 @@ func ResetAccount(databaseBackend *string, databasePath *string) {
 		return
 	}
 
+	//Drop the roles table too, aby se po resetu založila čistá admin role
+	if db.TableExists(TableRoles) {
+		err = db.DropTable(TableRoles)
+		if err != nil {
+			fmt.Println("Error dropping roles table:", err)
+			return
+		}
+	}
+
 	fmt.Println("Successfully reset admin account. All users have been removed from the system.")
 	fmt.Println("Please restart and create a new admin account.")
 }

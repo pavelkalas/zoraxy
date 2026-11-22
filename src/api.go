@@ -387,9 +387,42 @@ func RegisterAuthAPIs(requireAuth bool, targetMux *http.ServeMux) {
 			return
 		}
 
-		//Change the password of the root user
-		authAgent.UnregisterUser(username)
-		authAgent.CreateUserAccount(username, newPassword, "")
+		//Change the password and clear the "must change password" flag
+		if err := authAgent.ChangePassword(username, newPassword); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+		utils.SendOK(w)
+	})
+	targetMux.HandleFunc("/api/auth/myPermissions", func(w http.ResponseWriter, r *http.Request) {
+		username, err := authAgent.GetUserName(w, r)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		js, _ := json.Marshal(authAgent.GetUserPermissions(username))
+		utils.SendJSONResponse(w, string(js))
+	})
+	targetMux.HandleFunc("/api/auth/myRole", func(w http.ResponseWriter, r *http.Request) {
+		username, err := authAgent.GetUserName(w, r)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		js, _ := json.Marshal(map[string]string{
+			"username": username,
+			"role":     authAgent.GetUserRole(username),
+		})
+		utils.SendJSONResponse(w, string(js))
+	})
+	targetMux.HandleFunc("/api/auth/mustChangePassword", func(w http.ResponseWriter, r *http.Request) {
+		username, err := authAgent.GetUserName(w, r)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		js, _ := json.Marshal(authAgent.GetUserMustChangePassword(username))
+		utils.SendJSONResponse(w, string(js))
 	})
 }
 
@@ -431,6 +464,7 @@ func initAPIs(targetMux *http.ServeMux) {
 	RegisterTLSAPIs(authRouter)
 	RegisterAuthenticationHandlerAPIs(authRouter)
 	RegisterZorxAuthUserManagementAPIs(authRouter)
+	RegisterUserManagementAPIs(authRouter)
 	RegisterRedirectionAPIs(authRouter)
 	RegisterAccessRuleAPIs(authRouter)
 	RegisterPathRuleAPIs(authRouter)

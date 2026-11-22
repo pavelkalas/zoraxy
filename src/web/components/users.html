@@ -1,0 +1,471 @@
+<style>
+    #users .userFormSection .field { margin-bottom: 0.6em !important; }
+    #users .tableScrollWrapper { overflow-x: auto; }
+    #users .ui.table td { overflow-wrap: anywhere; word-break: break-word; }
+    #users .permGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 0.2em 1em;
+    }
+    #users .permGrid .field { margin-bottom: 0.2em !important; }
+</style>
+<div class="standardContainer">
+    <h2>Users & Roles</h2>
+    <p>Manage management interface users, roles and their permissions.</p>
+    <div class="ui divider"></div>
+
+    <div class="ui top attached tabular menu">
+        <a class="item active" data-tab="users"><i class="ui green user circle icon"></i> Users</a>
+        <a class="item" data-tab="roles"><i class="ui blue bookmark icon"></i> Roles</a>
+    </div>
+
+    <div class="ui bottom attached active tab segment" data-tab="users">
+        <h4 class="ui header">Registered Users</h4>
+        <div class="tableScrollWrapper">
+            <table class="ui very compact basic unstackable celled table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Password Change</th>
+                        <th style="width:5em; text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr><td colspan="5"><small>Loading users...</small></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="editUserSection" class="ui form userFormSection" style="display:none;">
+            <div class="ui divider"></div>
+            <b class="ui header">Editing User: <span id="editUsernameLabel"></span></b>
+            <p>Update the user and click "Save Changes". Leave password blank to keep the current one.</p>
+            <input type="hidden" id="editOriginalUsername">
+            <div class="two stackable fields">
+                <div class="field">
+                    <label>Email (Optional)</label>
+                    <input id="editEmail" type="text" placeholder="alice@example.com" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label>Role</label>
+                    <select id="editRole" class="ui fluid dropdown"></select>
+                </div>
+            </div>
+            <div class="two stackable fields">
+                <div class="field">
+                    <label>Password <small style="opacity:0.7;">(leave blank to keep)</small></label>
+                    <input id="editPassword" type="password" placeholder="Leave blank to keep" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label>&nbsp;</label>
+                    <div class="ui toggle checkbox">
+                        <input type="checkbox" id="editMustChangePassword">
+                        <label>User must change password on next login</label>
+                    </div>
+                </div>
+            </div>
+            <button class="ui basic button" onclick="saveUser();"><i class="ui green save icon"></i> Save Changes</button>
+            <button class="ui basic button" onclick="cancelEditUser();"><i class="ui grey cancel icon"></i> Cancel</button>
+        </div>
+
+        <div id="newUserSection" class="ui form userFormSection">
+            <div class="ui divider"></div>
+            <b class="ui header">Register New User</b>
+            <p>Create a new management interface user. Users can only be created by an administrator.</p>
+            <div class="three stackable fields">
+                <div class="field">
+                    <label>Username</label>
+                    <input id="newUsername" type="text" placeholder="alan" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label>Email (Optional)</label>
+                    <input id="newEmail" type="text" placeholder="alan@example.com" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label>Password</label>
+                    <input id="newPassword" type="password" placeholder="Required" autocomplete="off">
+                </div>
+            </div>
+            <div class="two stackable fields">
+                <div class="field">
+                    <label>Role</label>
+                    <select id="newRole" class="ui fluid dropdown"></select>
+                </div>
+                <div class="field">
+                    <label>&nbsp;</label>
+                    <div class="ui toggle checkbox">
+                        <input type="checkbox" id="newMustChangePassword">
+                        <label>User must change password on first login</label>
+                    </div>
+                </div>
+            </div>
+            <button class="ui basic button" onclick="createUser();"><i class="ui green add icon"></i> Register User</button>
+        </div>
+    </div>
+
+    <!-- ============ ROLES ============ -->
+    <div class="ui bottom attached tab segment" data-tab="roles">
+        <h4 class="ui header">Roles</h4>
+        <p>Roles group a set of permissions. The built-in <b>admin</b> role always has full access and cannot be deleted.</p>
+        <div class="tableScrollWrapper">
+            <table class="ui very compact basic unstackable celled table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Permissions</th>
+                        <th style="width:5em; text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="rolesTableBody">
+                    <tr><td colspan="4"><small>Loading roles...</small></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="editRoleSection" class="ui form userFormSection" style="display:none;">
+            <div class="ui divider"></div>
+            <b class="ui header">Editing Role: <span id="editRoleNameLabel"></span></b>
+            <input type="hidden" id="editRoleOriginalName">
+            <div class="field">
+                <label>Description (Optional)</label>
+                <input id="editRoleDescription" type="text" placeholder="Role description" autocomplete="off">
+            </div>
+            <label>Permissions</label>
+            <div id="editPermGrid" class="permGrid"></div>
+            <button class="ui basic button" onclick="saveRole();"><i class="ui green save icon"></i> Save Changes</button>
+            <button class="ui basic button" onclick="cancelEditRole();"><i class="ui grey cancel icon"></i> Cancel</button>
+        </div>
+
+        <div id="newRoleSection" class="ui form userFormSection">
+            <div class="ui divider"></div>
+            <b class="ui header">Create New Role</b>
+            <div class="two stackable fields">
+                <div class="field">
+                    <label>Name</label>
+                    <input id="newRoleName" type="text" placeholder="operator" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label>Description (Optional)</label>
+                    <input id="newRoleDescription" type="text" placeholder="Role description" autocomplete="off">
+                </div>
+            </div>
+            <label>Permissions</label>
+            <div id="newPermGrid" class="permGrid"></div>
+            <button class="ui basic button" onclick="createRole();"><i class="ui green add icon"></i> Create Role</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    var ALL_PERMISSIONS = [
+        { key: "status", label: "Status" },
+        { key: "ingress", label: "Ingress" },
+        { key: "reverseproxy", label: "Reverse Proxy" },
+        { key: "access", label: "Access & Connections" },
+        { key: "security", label: "Security" },
+        { key: "services", label: "Services" },
+        { key: "networking", label: "Networking" },
+        { key: "stats", label: "Statistical Analysis" },
+        { key: "utils", label: "Utilities" },
+        { key: "appstore", label: "App Store" },
+        { key: "plugins", label: "Plugin Manager" },
+        { key: "users", label: "User Management" }
+    ];
+
+    var roleList = [];
+
+    function escapeHtml(value) {
+        return String(value || "")
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function permLabel(key) {
+        for (var i = 0; i < ALL_PERMISSIONS.length; i++) {
+            if (ALL_PERMISSIONS[i].key === key) return ALL_PERMISSIONS[i].label;
+        }
+        return key;
+    }
+
+    function renderPermissions(containerId, selected) {
+        var html = "";
+        ALL_PERMISSIONS.forEach(function(p) {
+            var checked = (selected || []).indexOf(p.key) >= 0 ? "checked" : "";
+            html += '<div class="field"><div class="ui checkbox">' +
+                '<input type="checkbox" class="permCheck" data-perm="' + p.key + '" ' + checked + '>' +
+                '<label>' + p.label + '</label></div></div>';
+        });
+        $("#" + containerId).html(html);
+        $("#" + containerId + " .ui.checkbox").checkbox();
+    }
+
+    function collectPermissions(containerId) {
+        var out = [];
+        $("#" + containerId + " .permCheck:checked").each(function() {
+            out.push($(this).attr("data-perm"));
+        });
+        return out.join(",");
+    }
+
+    /* ============ USERS ============ */
+    function loadUsers() {
+        $("#usersTableBody").html('<tr><td colspan="5"><small>Loading users...</small></td></tr>');
+        $.get("/api/users/list", function(data) {
+            if (!data || data.error !== undefined) {
+                $("#usersTableBody").html('<tr><td colspan="5"><i class="ui red warning circle icon"></i> ' + escapeHtml(data ? data.error : 'Failed to load users') + '</td></tr>');
+                return;
+            }
+            renderUsers(data);
+        }).fail(function() {
+            $("#usersTableBody").html('<tr><td colspan="5"><i class="ui red warning circle icon"></i> Failed to load users</td></tr>');
+        });
+    }
+
+    function renderUsers(users) {
+        var body = $("#usersTableBody");
+        body.html("");
+        if (!users || users.length === 0) {
+            body.html('<tr><td colspan="5"><i class="ui green circle check icon"></i> No users found</td></tr>');
+            return;
+        }
+        users.forEach(function(u) {
+            var emailDisplay = escapeHtml(u.email) || '<span style="opacity:0.5;">—</span>';
+            var pwDisplay = u.mustChangePassword
+                ? '<span class="ui tiny orange label">must change</span>'
+                : '<span style="opacity:0.5;">—</span>';
+            body.append('<tr class="userRow" data-username="' + escapeHtml(u.username) + '" data-email="' + escapeHtml(u.email) + '" data-role="' + escapeHtml(u.role) + '" data-mustchange="' + (u.mustChangePassword ? '1' : '0') + '">' +
+                '<td>' + escapeHtml(u.username) + '</td>' +
+                '<td>' + emailDisplay + '</td>' +
+                '<td>' + escapeHtml(u.role) + '</td>' +
+                '<td>' + pwDisplay + '</td>' +
+                '<td style="text-align:right; white-space:nowrap;">' +
+                    '<button class="ui mini icon basic button" title="Edit user" onclick="openEditUser(this);"><i class="edit icon"></i></button>' +
+                    '<button class="ui mini icon basic red button" title="Delete user" onclick="deleteUser(this);"><i class="trash icon"></i></button>' +
+                '</td></tr>');
+        });
+    }
+
+    function openEditUser(btn) {
+        var row = $(btn).closest(".userRow");
+        $("#editOriginalUsername").val(row.attr("data-username"));
+        $("#editUsernameLabel").text(row.attr("data-username"));
+        $("#editEmail").val(row.attr("data-email"));
+        $("#editPassword").val("");
+        $("#editRole").val(row.attr("data-role"));
+        $("#editMustChangePassword").prop("checked", row.attr("data-mustchange") === "1");
+        $("#editUserSection").show();
+        $("#newUserSection").hide();
+        $("#editRole").dropdown("set selected", row.attr("data-role"));
+    }
+
+    function cancelEditUser() {
+        $("#editUserSection").hide();
+        $("#newUserSection").show();
+    }
+
+    function createUser() {
+        var username = $("#newUsername").val().trim();
+        var email = $("#newEmail").val().trim();
+        var password = $("#newPassword").val();
+        var role = $("#newRole").val();
+        var mustChange = $("#newMustChangePassword").is(":checked");
+
+        if (username === "" || password === "") {
+            msgbox("Username and password are required", false);
+            return;
+        }
+
+        $.cjax({
+            url: "/api/users/create",
+            method: "POST",
+            data: {
+                username: username,
+                email: email,
+                password: password,
+                role: role,
+                mustChangePassword: mustChange
+            },
+            success: function(data) {
+                if (data.error !== undefined) { msgbox(data.error, false); return; }
+                msgbox("User created");
+                $("#newUsername").val(""); $("#newEmail").val(""); $("#newPassword").val("");
+                $("#newMustChangePassword").prop("checked", false);
+                loadUsers();
+            }
+        });
+    }
+
+    function saveUser() {
+        var username = $("#editOriginalUsername").val();
+        $.cjax({
+            url: "/api/users/update",
+            method: "POST",
+            data: {
+                username: username,
+                email: $("#editEmail").val().trim(),
+                password: $("#editPassword").val(),
+                role: $("#editRole").val(),
+                mustChangePassword: $("#editMustChangePassword").is(":checked")
+            },
+            success: function(data) {
+                if (data.error !== undefined) { msgbox(data.error, false); return; }
+                msgbox("User updated");
+                cancelEditUser();
+                loadUsers();
+            }
+        });
+    }
+
+    function deleteUser(btn) {
+        var row = $(btn).closest(".userRow");
+        var username = row.attr("data-username");
+        if (!confirm('Delete user "' + username + '"?')) return;
+        $.cjax({
+            url: "/api/users/delete",
+            method: "POST",
+            data: { username: username },
+            success: function(data) {
+                if (data.error !== undefined) { msgbox(data.error, false); return; }
+                msgbox("User deleted");
+                loadUsers();
+            }
+        });
+    }
+
+    /* ============ ROLES ============ */
+    function populateRoleDropdowns(roles) {
+        roleList = roles || [];
+        var options = "";
+        roleList.forEach(function(r) {
+            options += '<option value="' + escapeHtml(r.name) + '">' + escapeHtml(r.name) + '</option>';
+        });
+        $("#newRole").html(options);
+        $("#editRole").html(options);
+        $("#newRole").dropdown();
+        $("#editRole").dropdown();
+    }
+
+    function loadRoles(callback) {
+        $("#rolesTableBody").html('<tr><td colspan="4"><small>Loading roles...</small></td></tr>');
+        $.get("/api/users/roles/list", function(data) {
+            var roles = Array.isArray(data) ? data : [];
+            populateRoleDropdowns(roles);
+            renderRoles(roles);
+            if (callback) callback(roles);
+        }).fail(function() {
+            $("#rolesTableBody").html('<tr><td colspan="4"><i class="ui red warning circle icon"></i> Failed to load roles</td></tr>');
+            if (callback) callback([]);
+        });
+    }
+
+    function renderRoles(roles) {
+        var body = $("#rolesTableBody");
+        body.html("");
+        if (!roles || roles.length === 0) {
+            body.html('<tr><td colspan="4"><i class="ui green circle check icon"></i> No roles found</td></tr>');
+            return;
+        }
+        roles.forEach(function(r) {
+            var isAdmin = r.name === "admin";
+            var perms = r.permissions || [];
+            var permsDisplay = perms.length > 0
+                ? perms.map(function(p) { return '<span class="ui tiny label">' + escapeHtml(permLabel(p)) + '</span>'; }).join(" ")
+                : '<span style="opacity:0.5;">none</span>';
+            var descDisplay = escapeHtml(r.description) || '<span style="opacity:0.5;">—</span>';
+            var actions = isAdmin
+                ? '<span style="opacity:0.5;" title="Built-in">built-in</span>'
+                : '<button class="ui mini icon basic button" title="Edit role" onclick="openEditRole(this);"><i class="edit icon"></i></button>' +
+                  '<button class="ui mini icon basic red button" title="Delete role" onclick="deleteRole(this);"><i class="trash icon"></i></button>';
+            body.append('<tr class="roleRow" data-name="' + escapeHtml(r.name) + '" data-description="' + escapeHtml(r.description) + '" data-perms="' + escapeHtml(perms.join(",")) + '">' +
+                '<td>' + escapeHtml(r.name) + (isAdmin ? ' <span class="ui tiny blue label">admin</span>' : '') + '</td>' +
+                '<td>' + descDisplay + '</td>' +
+                '<td>' + permsDisplay + '</td>' +
+                '<td style="text-align:right; white-space:nowrap;">' + actions + '</td></tr>');
+        });
+    }
+
+    function openEditRole(btn) {
+        var row = $(btn).closest(".roleRow");
+        var name = row.attr("data-name");
+        var perms = (row.attr("data-perms") || "").split(",").filter(function(p) { return p !== ""; });
+        $("#editRoleOriginalName").val(name);
+        $("#editRoleNameLabel").text(name);
+        $("#editRoleDescription").val(row.attr("data-description"));
+        renderPermissions("editPermGrid", perms);
+        if (name === "admin") {
+            $("#editPermGrid .permCheck").prop("disabled", true).prop("checked", true);
+            $("#editPermGrid .ui.checkbox").checkbox();
+        }
+        $("#editRoleSection").show();
+        $("#newRoleSection").hide();
+    }
+
+    function cancelEditRole() {
+        $("#editRoleSection").hide();
+        $("#newRoleSection").show();
+    }
+
+    function createRole() {
+        var name = $("#newRoleName").val().trim();
+        if (name === "") { msgbox("Role name is required", false); return; }
+        $.cjax({
+            url: "/api/users/roles/create",
+            method: "POST",
+            data: {
+                name: name,
+                description: $("#newRoleDescription").val().trim(),
+                permissions: collectPermissions("newPermGrid")
+            },
+            success: function(data) {
+                if (data.error !== undefined) { msgbox(data.error, false); return; }
+                msgbox("Role created");
+                $("#newRoleName").val(""); $("#newRoleDescription").val("");
+                renderPermissions("newPermGrid", []);
+                loadRoles(function() { loadUsers(); });
+            }
+        });
+    }
+
+    function saveRole() {
+        var name = $("#editRoleOriginalName").val();
+        $.cjax({
+            url: "/api/users/roles/update",
+            method: "POST",
+            data: {
+                name: name,
+                description: $("#editRoleDescription").val().trim(),
+                permissions: collectPermissions("editPermGrid")
+            },
+            success: function(data) {
+                if (data.error !== undefined) { msgbox(data.error, false); return; }
+                msgbox("Role updated");
+                cancelEditRole();
+                loadRoles(function() { loadUsers(); });
+            }
+        });
+    }
+
+    function deleteRole(btn) {
+        var row = $(btn).closest(".roleRow");
+        var name = row.attr("data-name");
+        if (!confirm('Delete role "' + name + '"?')) return;
+        $.cjax({
+            url: "/api/users/roles/delete",
+            method: "POST",
+            data: { name: name },
+            success: function(data) {
+                if (data.error !== undefined) { msgbox(data.error, false); return; }
+                msgbox("Role deleted");
+                loadRoles(function() { loadUsers(); });
+            }
+        });
+    }
+
+    /* ============ INIT ============ */
+    $(".tabular.menu .item").tab();
+    renderPermissions("newPermGrid", []);
+    loadRoles(function() { loadUsers(); });
+</script>
