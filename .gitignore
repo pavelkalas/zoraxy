@@ -54,7 +54,9 @@ www/html/index.html
 
 /src/plugins
 .DS_Store
-/build
+# build/ - skripty pro build docker image (artefakty ignoruje i build/.gitignore)
+/build/output/
+/build/.context/
 src/zoraxy.exe~
 /src/www
 /src/conf.old_*
