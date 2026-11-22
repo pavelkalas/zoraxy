@@ -273,6 +273,7 @@ type ProxyEndpoint struct {
 	UseStickySession     bool                    //Use stick session for load balancing
 	UseActiveLoadBalance bool                    //Use active loadbalancing, default passive
 	Disabled             bool                    //If the rule is disabled
+	UnderAttack          bool                    //If the rule is in "under attack" mode (serve an interstitial instead of proxying)
 	ListeningPorts       []string                //Alternative listening ports in format "ip:port" or ":port" (e.g., ":8080", "192.168.1.1:8080")
 
 	//Inbound TLS/SSL Related

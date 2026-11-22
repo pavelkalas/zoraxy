@@ -174,6 +174,12 @@
             stroke-dasharray: 4 3;
         }
 
+        .proxy-node.under-attack rect {
+            fill: rgba(255, 107, 107, 0.12);
+            stroke: #ff6b6b;
+            stroke-width: 2;
+        }
+
         .upstream-node rect {
             fill: var(--node-upstream-bg);
             stroke: var(--node-upstream-border);
@@ -398,7 +404,7 @@
 
     /* Build a rounded-rect node group */
     function buildProxyNode(proxy, x, y) {
-        const g = svgEl("g", { class: "proxy-node" + (proxy.disabled ? " disabled" : "") });
+        const g = svgEl("g", { class: "proxy-node" + (proxy.disabled ? " disabled" : "") + (proxy.underAttack ? " under-attack" : "") });
 
         const rx = 8;
         g.appendChild(svgEl("rect", {
@@ -415,10 +421,14 @@
         titleEl.textContent = truncate(proxy.domain, 22);
         g.appendChild(titleEl);
 
-        // Status / disabled badge
+        // Status / disabled / under-attack badge
         if (proxy.disabled) {
             const badge = svgEl("text", { x: x + PROXY_W - 10, y: y + 19, class: "node-subtitle", "text-anchor": "end" });
             badge.textContent = "disabled";
+            g.appendChild(badge);
+        } else if (proxy.underAttack) {
+            const badge = svgEl("text", { x: x + PROXY_W - 10, y: y + 19, class: "node-subtitle", "text-anchor": "end", style: "fill:#ff6b6b; font-weight:bold;" });
+            badge.textContent = "under attack";
             g.appendChild(badge);
         }
 

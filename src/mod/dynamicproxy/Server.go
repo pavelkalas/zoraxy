@@ -76,6 +76,13 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		/* Under attack mode */
+		if sep.UnderAttack {
+			serveUnderAttackPage(w, r)
+			h.Parent.logRequest(r, false, 503, "under-attack", domainOnly, "under-attack", sep)
+			return
+		}
+
 		/* Exploit Detection */
 		if sep.detector != nil {
 			if sep.detector.CheckIsAttack(w, r) {

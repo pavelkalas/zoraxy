@@ -47,6 +47,7 @@ type TrafficMapUpstream struct {
 type TrafficMapProxy struct {
 	Domain       string               `json:"domain"`
 	Disabled     bool                 `json:"disabled"`
+	UnderAttack  bool                 `json:"underAttack"`
 	RequestCount int                  `json:"requestCount"`
 	Upstreams    []*TrafficMapUpstream `json:"upstreams"`
 }
@@ -75,11 +76,18 @@ func HandleTrafficMapData(w http.ResponseWriter, r *http.Request) {
 		return 0
 	}
 
+	// Filtruj domény podle oprávnění aktuálního uživatele (admin / domainsAll vidí vše).
+	username, _ := authAgent.GetUsernameFromRequest(r)
+
 	dynamicProxyRouter.ProxyEndpoints.Range(func(_, value interface{}) bool {
 		ep := value.(*dynamicproxy.ProxyEndpoint)
+		if !authAgent.UserCanAccessDomain(username, ep.RootOrMatchingDomain) {
+			return true //přeskoč doménu, na kterou nemá uživatel oprávnění
+		}
 		proxyNode := &TrafficMapProxy{
 			Domain:       ep.RootOrMatchingDomain,
 			Disabled:     ep.Disabled,
+			UnderAttack:  ep.UnderAttack,
 			RequestCount: lookupCount(statisticCollector.DailySummary.DownstreamHostnames, ep.RootOrMatchingDomain),
 			Upstreams:    []*TrafficMapUpstream{},
 		}

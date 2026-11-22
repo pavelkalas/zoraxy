@@ -98,6 +98,47 @@ func handleDomainPermissions(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
+// HandleUnderAttack zapne / vypne režim "under attack" pro dané domény.
+// Když je zapnutý, návštěvníci uvidí interstitial místo cílového webu.
+func HandleUnderAttack(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	enable := r.FormValue("enable") == "true" || r.FormValue("enable") == "1"
+
+	domains := []string{}
+	for _, d := range strings.Split(r.FormValue("domains"), ",") {
+		d = strings.TrimSpace(d)
+		if d != "" {
+			domains = append(domains, d)
+		}
+	}
+	if len(domains) == 0 {
+		utils.SendErrorResponse(w, "no domains given")
+		return
+	}
+
+	for _, domain := range domains {
+		if !requireDomainAccess(w, r, domain) {
+			return
+		}
+		ep, err := dynamicProxyRouter.LoadProxy(domain)
+		if err != nil {
+			utils.SendErrorResponse(w, "domain not found: "+domain)
+			return
+		}
+		ep.UnderAttack = enable
+		if err := SaveReverseProxyConfig(ep); err != nil {
+			utils.SendErrorResponse(w, "failed to save: "+domain)
+			return
+		}
+	}
+
+	utils.SendOK(w)
+}
+
 // addOrRemoveDomain přidá / odebere host ze seznamu domén (bez duplicit).
 func addOrRemoveDomain(domains []string, host string, add bool) []string {
 	out := []string{}
