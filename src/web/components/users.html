@@ -279,9 +279,14 @@
         users.forEach(function(u) {
             var emailDisplay = escapeHtml(u.email) || '<span style="opacity:0.5;">—</span>';
             var domains = u.domains || [];
-            var domainsDisplay = domains.length > 0
-                ? domains.map(function(d) { return '<span class="ui tiny label">' + escapeHtml(d) + '</span>'; }).join(" ")
-                : '<span style="opacity:0.5;">all</span>';
+            var domainsDisplay;
+            if (u.role === "admin") {
+                domainsDisplay = '<span style="opacity:0.5;">all</span>';
+            } else if (domains.length > 0) {
+                domainsDisplay = domains.map(function(d) { return '<span class="ui tiny label">' + escapeHtml(d) + '</span>'; }).join(" ");
+            } else {
+                domainsDisplay = '<span style="opacity:0.5; color:#db2828;">none</span>';
+            }
             var pwDisplay = u.mustChangePassword
                 ? '<span class="ui tiny orange label">must change</span>'
                 : '<span style="opacity:0.5;">—</span>';
