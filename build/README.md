@@ -14,6 +14,7 @@ Build běží přes **WSL** (protože tam máš Docker), výsledek se uloží ja
 | `Dockerfile`| Dockerfile **bez ZeroTieru** (používá ho `build.bat`)      |
 | `load.bat`  | Na cíli načte tar zpět do Dockeru (`docker load`)         |
 | `push.bat`  | (volitelné) pushne image do Docker registru               |
+| `deploy.sh` | Na serveru: `docker load` + přepíše image + `compose up -d` |
 
 > **Proč bez ZeroTieru?** Oficiální Dockerfile kompiluje ZeroTier (funkce
 > "Global Area Network"), což je zdaleka nejpomalejší část buildu (stahuje
