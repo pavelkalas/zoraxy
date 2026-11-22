@@ -30,37 +30,74 @@ const roleKeyPrefix = "role/"
 // Název výchozí administrátorské role. Tahle role má vždycky všechna oprávnění.
 const DefaultRoleName = "admin"
 
-// Jednotlivá oprávnění. Každé odpovídá jedné sekci v management rozhraní.
+// Jednotlivá oprávnění. Každé odpovídá jedné záložce / podkategorii
+// v management rozhraní (jemnější než původní sekce).
 const (
-	PermissionStatus       = "status"
-	PermissionIngress      = "ingress"
-	PermissionReverseProxy = "reverseproxy"
-	PermissionAccess       = "access"
-	PermissionSecurity     = "security"
-	PermissionServices     = "services"
-	PermissionNetworking   = "networking"
-	PermissionStats        = "stats"
-	PermissionUtilities    = "utils"
-	PermissionAppStore     = "appstore"
-	PermissionPlugins      = "plugins"
-	PermissionUsers        = "users"
+	PermissionStatus      = "status"
+	PermissionIngress     = "ingress"
+	PermissionSetRoot     = "setroot"
+	PermissionHttpRp      = "httprp"
+	PermissionVdir        = "vdir"
+	PermissionRules       = "rules"
+	PermissionStreamProxy = "streamproxy"
+	PermissionRedirectSet = "redirectset"
+	PermissionAccess      = "access"
+	PermissionTrustProxy  = "trustproxy"
+	PermissionCert        = "cert"
+	PermissionAcme        = "acme"
+	PermissionSso         = "sso"
+	PermissionWebServ     = "webserv"
+	PermissionUtm         = "utm"
+	PermissionNetworkTool = "networktool"
+	PermissionIface       = "iface"
+	PermissionStats       = "stats"
+	PermissionUtilities   = "utils"
+	PermissionAppStore    = "appstore"
+	PermissionPlugins     = "plugins"
+	PermissionUsers       = "users"
 )
 
-// AllPermissions je seznam všech známých oprávnění. Používá se hlavně pro
-// výchozí admin roli a pro vykreslení zaškrtávacích políček ve webovém UI.
+// AllPermissions je seznam všech známých oprávnění (záložek). Používá se pro
+// výchozí admin roli a pro vykreslení permission matrix ve webovém UI.
 var AllPermissions = []string{
 	PermissionStatus,
 	PermissionIngress,
-	PermissionReverseProxy,
+	PermissionSetRoot,
+	PermissionHttpRp,
+	PermissionVdir,
+	PermissionRules,
+	PermissionStreamProxy,
+	PermissionRedirectSet,
 	PermissionAccess,
-	PermissionSecurity,
-	PermissionServices,
-	PermissionNetworking,
+	PermissionTrustProxy,
+	PermissionCert,
+	PermissionAcme,
+	PermissionSso,
+	PermissionWebServ,
+	PermissionUtm,
+	PermissionNetworkTool,
+	PermissionIface,
 	PermissionStats,
 	PermissionUtilities,
 	PermissionAppStore,
 	PermissionPlugins,
 	PermissionUsers,
+}
+
+// TabPermission popisuje oprávnění na jednu záložku: jestli má uživatel přístup
+// a jestli jen pro čtení (view only) nebo může i měnit.
+type TabPermission struct {
+	Allow    bool `json:"allow"`
+	ViewOnly bool `json:"viewOnly"`
+}
+
+// Vrátí mapu oprávnění pro všechny záložky (pro admina plný přístup).
+func fullTabPermissions() map[string]TabPermission {
+	out := map[string]TabPermission{}
+	for _, k := range AllPermissions {
+		out[k] = TabPermission{Allow: true, ViewOnly: false}
+	}
+	return out
 }
 
 // Role reprezentuje jednu roli v systému.
@@ -76,8 +113,9 @@ type UserInfo struct {
 	Email              string   `json:"email"`
 	Role               string   `json:"role"`
 	MustChangePassword bool     `json:"mustChangePassword"`
-	Domains            []string `json:"domains"`    // konkrétní proxy domény, ke kterým má uživatel přístup
-	DomainsAll         bool     `json:"domainsAll"` // true = uživatel vidí všechny domény (globální oprávnění)
+	Domains            []string                  `json:"domains"`    // konkrétní proxy domény, ke kterým má uživatel přístup
+	DomainsAll         bool                      `json:"domainsAll"` // true = uživatel vidí všechny domény (globální oprávnění)
+	TabPermissions     map[string]TabPermission  `json:"tabPermissions"` // permission matrix po jednotlivých záložkách
 }
 
 func (a *AuthAgent) roleKey(name string) string {
@@ -244,18 +282,68 @@ func (a *AuthAgent) SetUserMustChangePassword(username string, must bool) error 
 	return a.Database.Write("auth", "mustchangepw/"+username, must)
 }
 
-// GetUserPermissions vrátí oprávnění pro daného uživatele. Admin role má
-// vždycky všechno, bez ohledu na to, co je uložené v roli.
+// GetUserPermissions vrátí seznam klíčů záložek, ke kterým má uživatel přístup.
+// Admin má vždycky všechno.
 func (a *AuthAgent) GetUserPermissions(username string) []string {
-	roleName := a.GetUserRole(username)
-	if roleName == DefaultRoleName {
+	if a.GetUserRole(username) == DefaultRoleName {
 		return append([]string{}, AllPermissions...)
 	}
-	role, err := a.GetRole(roleName)
-	if err != nil {
-		return []string{}
+	perms := a.GetUserTabPermissions(username)
+	out := []string{}
+	for _, key := range AllPermissions {
+		if p, ok := perms[key]; ok && p.Allow {
+			out = append(out, key)
+		}
 	}
-	return append([]string{}, role.Permissions...)
+	return out
+}
+
+// GetUserTabPermissions vrátí celou permission matrix uživatele (allow + viewOnly).
+func (a *AuthAgent) GetUserTabPermissions(username string) map[string]TabPermission {
+	perms := map[string]TabPermission{}
+	_ = a.Database.Read("auth", "perm/"+username, &perms)
+	return perms
+}
+
+// SetUserTabPermissions uloží permission matrix uživatele.
+func (a *AuthAgent) SetUserTabPermissions(username string, perms map[string]TabPermission) error {
+	return a.Database.Write("auth", "perm/"+username, perms)
+}
+
+// GetUserFullTabPermissions vrátí permission matrix uživatele. Admin dostane
+// plný přístup ke všem záložkám.
+func (a *AuthAgent) GetUserFullTabPermissions(username string) map[string]TabPermission {
+	if a.GetUserRole(username) == DefaultRoleName {
+		return fullTabPermissions()
+	}
+	return a.GetUserTabPermissions(username)
+}
+
+// UserTabAllowed zjistí, jestli má uživatel přístup k dané záložce.
+func (a *AuthAgent) UserTabAllowed(username, key string) bool {
+	if a.GetUserRole(username) == DefaultRoleName {
+		return true
+	}
+	p, ok := a.GetUserTabPermissions(username)[key]
+	return ok && p.Allow
+}
+
+// UserTabViewOnly zjistí, jestli má uživatel k záložce jen čtení.
+func (a *AuthAgent) UserTabViewOnly(username, key string) bool {
+	if a.GetUserRole(username) == DefaultRoleName {
+		return false
+	}
+	p, ok := a.GetUserTabPermissions(username)[key]
+	return ok && p.Allow && p.ViewOnly
+}
+
+// UserViewOnly zjistí z requestu, jestli má aktuální uživatel k záložce jen čtení.
+func (a *AuthAgent) UserViewOnly(r *http.Request, key string) bool {
+	username, err := a.GetUsernameFromRequest(r)
+	if err != nil {
+		return false
+	}
+	return a.UserTabViewOnly(username, key)
 }
 
 // GetUsernameFromRequest vytáhne jméno přihlášeného uživatele ze session,
@@ -341,7 +429,7 @@ func (a *AuthAgent) PermissionForPath(path string) string {
 		return ""
 	}
 
-	// Správa uživatelů a rolí je jen pro adminy / roli s oprávněním "users".
+	// Správa uživatelů a rolí.
 	if strings.HasPrefix(path, "/api/users/") {
 		return PermissionUsers
 	}
@@ -362,22 +450,45 @@ func (a *AuthAgent) PermissionForPath(path string) string {
 		return PermissionIngress
 	}
 
-	if strings.HasPrefix(path, "/api/proxy/") || strings.HasPrefix(path, "/api/streamprox/") {
-		return PermissionReverseProxy
+	if strings.HasPrefix(path, "/api/proxy/vdir/") {
+		return PermissionVdir
 	}
-	if strings.HasPrefix(path, "/api/cert/") ||
-		strings.HasPrefix(path, "/api/acme/") ||
-		strings.HasPrefix(path, "/api/sso/") {
-		return PermissionSecurity
+	if strings.HasPrefix(path, "/api/proxy/upstream/") ||
+		strings.HasPrefix(path, "/api/proxy/header/") ||
+		strings.HasPrefix(path, "/api/proxy/auth/") ||
+		strings.HasPrefix(path, "/api/proxy/domainPermissions") {
+		return PermissionHttpRp
 	}
-	if strings.HasPrefix(path, "/api/redirect/") ||
-		strings.HasPrefix(path, "/api/access/") ||
+	if strings.HasPrefix(path, "/api/proxy/") {
+		return PermissionHttpRp
+	}
+	if strings.HasPrefix(path, "/api/streamprox/") {
+		return PermissionStreamProxy
+	}
+	if strings.HasPrefix(path, "/api/cert/") {
+		return PermissionCert
+	}
+	if strings.HasPrefix(path, "/api/acme/") {
+		return PermissionAcme
+	}
+	if strings.HasPrefix(path, "/api/sso/") {
+		return PermissionSso
+	}
+	if strings.HasPrefix(path, "/api/redirect/") {
+		return PermissionRedirectSet
+	}
+	if strings.HasPrefix(path, "/api/access/") ||
 		strings.HasPrefix(path, "/api/blacklist/") ||
 		strings.HasPrefix(path, "/api/whitelist/") ||
 		strings.HasPrefix(path, "/api/quickban/") ||
-		strings.HasPrefix(path, "/api/trustedproxy/") ||
 		strings.HasPrefix(path, "/api/pathrule/") {
 		return PermissionAccess
+	}
+	if strings.HasPrefix(path, "/api/trustedproxy/") {
+		return PermissionTrustProxy
+	}
+	if path == "/api/stats/listnic" || path == "/api/sysinfo/nic" {
+		return PermissionIface
 	}
 	if strings.HasPrefix(path, "/api/stats/") || strings.HasPrefix(path, "/api/sysinfo/") {
 		return PermissionStatus
@@ -385,15 +496,18 @@ func (a *AuthAgent) PermissionForPath(path string) string {
 	if strings.HasPrefix(path, "/api/analytic/") {
 		return PermissionStats
 	}
-	if strings.HasPrefix(path, "/api/webserv/") || strings.HasPrefix(path, "/api/utm/") {
-		return PermissionServices
+	if strings.HasPrefix(path, "/api/webserv/") {
+		return PermissionWebServ
+	}
+	if strings.HasPrefix(path, "/api/utm/") {
+		return PermissionUtm
 	}
 	if strings.HasPrefix(path, "/api/tools/") ||
 		strings.HasPrefix(path, "/api/mdns/") ||
 		strings.HasPrefix(path, "/api/info/geoip") ||
 		strings.HasPrefix(path, "/api/info/ipcheck") ||
 		strings.HasPrefix(path, "/api/geodb/") {
-		return PermissionNetworking
+		return PermissionNetworkTool
 	}
 	if strings.HasPrefix(path, "/api/plugins/store/") {
 		return PermissionAppStore
@@ -407,11 +521,10 @@ func (a *AuthAgent) PermissionForPath(path string) string {
 		return PermissionUtilities
 	}
 	if strings.HasPrefix(path, "/api/docker/") {
-		return PermissionReverseProxy
+		return PermissionHttpRp
 	}
 
-	// Neznámý endpoint: vyžaduje admina. Router to pozná podle prázdného
-	// stringu a zařídí, že se k němu dostane jen admin.
+	// Neznámý endpoint: vyžaduje admina.
 	return ""
 }
 
@@ -429,6 +542,7 @@ func (a *AuthAgent) ListUserObjects() []UserInfo {
 			MustChangePassword: a.GetUserMustChangePassword(username),
 			Domains:            a.GetUserDomains(username),
 			DomainsAll:         a.GetUserDomainsAll(username),
+			TabPermissions:     a.GetUserFullTabPermissions(username),
 		})
 	}
 	return results

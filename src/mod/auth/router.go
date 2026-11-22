@@ -61,6 +61,10 @@ func (router *RouterDef) HandleFunc(endpoint string, handler func(http.ResponseW
 		} else if !authAgent.UserHasPermission(r, permission) {
 			denyWithJSON(w, "insufficient permission")
 			return
+		} else if authAgent.UserViewOnly(r, permission) && r.Method != http.MethodGet {
+			//View-only uživatel smí jen číst (GET), ne měnit.
+			denyWithJSON(w, "view only access")
+			return
 		}
 
 		handler(w, r)

@@ -403,6 +403,15 @@ func RegisterAuthAPIs(requireAuth bool, targetMux *http.ServeMux) {
 		js, _ := json.Marshal(authAgent.GetUserPermissions(username))
 		utils.SendJSONResponse(w, string(js))
 	})
+	targetMux.HandleFunc("/api/auth/myTabPermissions", func(w http.ResponseWriter, r *http.Request) {
+		username, err := authAgent.GetUserName(w, r)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		js, _ := json.Marshal(authAgent.GetUserFullTabPermissions(username))
+		utils.SendJSONResponse(w, string(js))
+	})
 	targetMux.HandleFunc("/api/auth/myRole", func(w http.ResponseWriter, r *http.Request) {
 		username, err := authAgent.GetUserName(w, r)
 		if err != nil {

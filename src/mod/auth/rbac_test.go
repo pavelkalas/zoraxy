@@ -53,7 +53,7 @@ func TestRoleCRUD(t *testing.T) {
 	agent, tmpDir := newTestAuthAgent(t)
 	defer os.RemoveAll(tmpDir)
 
-	err := agent.SaveRole(&Role{Name: "operator", Description: "test", Permissions: []string{PermissionStatus, PermissionReverseProxy}})
+	err := agent.SaveRole(&Role{Name: "operator", Description: "test", Permissions: []string{PermissionStatus, PermissionHttpRp}})
 	if err != nil {
 		t.Fatalf("SaveRole selhalo: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestRoleCRUD(t *testing.T) {
 	}
 }
 
-// TestUserCreateAndPermissions ověří uživatele, roli a povinnou změnu hesla.
+// TestUserCreateAndPermissions ověří uživatele, roli, permission matrix a povinnou změnu hesla.
 func TestUserCreateAndPermissions(t *testing.T) {
 	agent, tmpDir := newTestAuthAgent(t)
 	defer os.RemoveAll(tmpDir)
@@ -121,9 +121,28 @@ func TestUserCreateAndPermissions(t *testing.T) {
 		t.Fatal("alice by měla mít povinnou změnu hesla")
 	}
 
+	// Nastav permission matrix: status povolen, acme jen pro čtení.
+	_ = agent.SetUserTabPermissions("alice", map[string]TabPermission{
+		PermissionStatus: {Allow: true, ViewOnly: false},
+		PermissionAcme:   {Allow: true, ViewOnly: true},
+	})
+
 	perms := agent.GetUserPermissions("alice")
-	if len(perms) != 1 || perms[0] != PermissionStatus {
+	if len(perms) != 2 || perms[0] != PermissionStatus || perms[1] != PermissionAcme {
 		t.Fatalf("alice má špatná oprávnění: %v", perms)
+	}
+
+	if !agent.UserTabAllowed("alice", PermissionStatus) {
+		t.Fatal("alice by měla mít přístup na status")
+	}
+	if agent.UserTabViewOnly("alice", PermissionStatus) {
+		t.Fatal("status by neměl být jen pro čtení")
+	}
+	if !agent.UserTabViewOnly("alice", PermissionAcme) {
+		t.Fatal("acme by měl být jen pro čtení")
+	}
+	if agent.UserTabAllowed("alice", PermissionCert) {
+		t.Fatal("alice by neměla mít přístup na cert")
 	}
 
 	if !agent.ValidateUsernameAndPassword("alice", "tajne") {
@@ -188,19 +207,19 @@ func TestPermissionForPath(t *testing.T) {
 
 	cases := map[string]string{
 		"/api/users/list":             PermissionUsers,
-		"/api/proxy/list":             PermissionReverseProxy,
+		"/api/proxy/list":             PermissionHttpRp,
 		"/api/proxy/setIncoming":      PermissionIngress,
-		"/api/cert/list":              PermissionSecurity,
-		"/api/redirect/list":          PermissionAccess,
+		"/api/cert/list":              PermissionCert,
+		"/api/redirect/list":          PermissionRedirectSet,
 		"/api/stats/summary":          PermissionStatus,
 		"/api/analytic/list":          PermissionStats,
-		"/api/webserv/status":         PermissionServices,
-		"/api/tools/ping":             PermissionNetworking,
+		"/api/webserv/status":         PermissionWebServ,
+		"/api/tools/ping":             PermissionNetworkTool,
 		"/api/plugins/list":           PermissionPlugins,
 		"/api/plugins/store/list":     PermissionAppStore,
 		"/api/conf/export":            PermissionUtilities,
 		"/api/auth/login":             "",
-		"/api/streamprox/config/list": PermissionReverseProxy,
+		"/api/streamprox/config/list": PermissionStreamProxy,
 	}
 
 	for path, want := range cases {

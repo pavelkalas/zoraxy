@@ -76,6 +76,11 @@
                 </div>
                 <div id="editDomainGrid" class="permGrid" style="max-height:220px; overflow-y:auto; border:1px solid var(--divider_color); border-radius:0.4em; padding:0.5em;"></div>
             </div>
+            <div class="field">
+                <label>Tab Permissions</label>
+                <small style="opacity:0.7;">Per-tab access. "Allow" = tab visible, "View only" = read only (cannot change anything).</small>
+                <div id="editPermMatrix" style="max-height:280px; overflow-y:auto;"></div>
+            </div>
             <button class="ui basic button" onclick="saveUser();"><i class="ui green save icon"></i> Save Changes</button>
             <button class="ui basic button" onclick="cancelEditUser();"><i class="ui grey cancel icon"></i> Cancel</button>
         </div>
@@ -119,6 +124,11 @@
                     <label>Can access ALL domains (global)</label>
                 </div>
                 <div id="newDomainGrid" class="permGrid" style="max-height:220px; overflow-y:auto; border:1px solid var(--divider_color); border-radius:0.4em; padding:0.5em;"></div>
+            </div>
+            <div class="field">
+                <label>Tab Permissions</label>
+                <small style="opacity:0.7;">Per-tab access. "Allow" = tab visible, "View only" = read only (cannot change anything).</small>
+                <div id="newPermMatrix" style="max-height:280px; overflow-y:auto;"></div>
             </div>
             <button class="ui basic button" onclick="createUser();"><i class="ui green add icon"></i> Register User</button>
         </div>
@@ -182,11 +192,21 @@
     var ALL_PERMISSIONS = [
         { key: "status", label: "Status" },
         { key: "ingress", label: "Ingress" },
-        { key: "reverseproxy", label: "Reverse Proxy" },
-        { key: "access", label: "Access & Connections" },
-        { key: "security", label: "Security" },
-        { key: "services", label: "Services" },
-        { key: "networking", label: "Networking" },
+        { key: "setroot", label: "Default Site" },
+        { key: "httprp", label: "HTTP Proxy" },
+        { key: "vdir", label: "Virtual Directory" },
+        { key: "rules", label: "Create Proxy Rule" },
+        { key: "streamproxy", label: "Stream Proxy" },
+        { key: "redirectset", label: "Redirection" },
+        { key: "access", label: "Access Control" },
+        { key: "trustproxy", label: "Trusted Proxy" },
+        { key: "cert", label: "TLS / SSL certificates" },
+        { key: "acme", label: "ACME Client" },
+        { key: "sso", label: "SSO / OAuth2" },
+        { key: "webserv", label: "Static Web Server" },
+        { key: "utm", label: "Uptime Monitor" },
+        { key: "networktool", label: "Network Tools" },
+        { key: "iface", label: "Network Interfaces" },
         { key: "stats", label: "Statistical Analysis" },
         { key: "utils", label: "Utilities" },
         { key: "appstore", label: "App Store" },
@@ -263,6 +283,35 @@
         });
     }
 
+    /* ============ TAB PERMISSIONS ============ */
+    function renderPermMatrix(containerId, selectedMap) {
+        var selected = selectedMap || {};
+        var html = '<table class="ui very compact basic celled table"><thead><tr>' +
+            '<th>Section</th><th>Allow access</th><th>View only</th></tr></thead><tbody>';
+        ALL_PERMISSIONS.forEach(function(p) {
+            var allow = selected[p.key] && selected[p.key].allow ? "checked" : "";
+            var view = selected[p.key] && selected[p.key].viewOnly ? "checked" : "";
+            html += '<tr>' +
+                '<td>' + p.label + '</td>' +
+                '<td style="text-align:center;"><div class="ui checkbox"><input type="checkbox" class="permAllow" data-key="' + p.key + '" ' + allow + '></div></td>' +
+                '<td style="text-align:center;"><div class="ui checkbox"><input type="checkbox" class="permView" data-key="' + p.key + '" ' + view + '></div></td>' +
+                '</tr>';
+        });
+        html += '</tbody></table>';
+        $("#" + containerId).html(html);
+        $("#" + containerId + " .ui.checkbox").checkbox();
+    }
+
+    function collectPermMatrix(containerId) {
+        var map = {};
+        ALL_PERMISSIONS.forEach(function(p) {
+            var allow = $("#" + containerId + " .permAllow[data-key='" + p.key + "']").is(":checked");
+            var view = $("#" + containerId + " .permView[data-key='" + p.key + "']").is(":checked");
+            map[p.key] = { allow: allow, viewOnly: view };
+        });
+        return map;
+    }
+
     /* ============ USERS ============ */
     function loadUsers() {
         $("#usersTableBody").html('<tr><td colspan="6"><small>Loading users...</small></td></tr>');
@@ -298,7 +347,7 @@
             var pwDisplay = u.mustChangePassword
                 ? '<span class="ui tiny orange label">must change</span>'
                 : '<span style="opacity:0.5;">—</span>';
-            body.append('<tr class="userRow" data-username="' + escapeHtml(u.username) + '" data-email="' + escapeHtml(u.email) + '" data-role="' + escapeHtml(u.role) + '" data-mustchange="' + (u.mustChangePassword ? '1' : '0') + '" data-domains="' + escapeHtml(domains.join(',')) + '" data-domainsall="' + (u.domainsAll ? '1' : '0') + '">' +
+            body.append('<tr class="userRow" data-username="' + escapeHtml(u.username) + '" data-email="' + escapeHtml(u.email) + '" data-role="' + escapeHtml(u.role) + '" data-mustchange="' + (u.mustChangePassword ? '1' : '0') + '" data-domains="' + escapeHtml(domains.join(',')) + '" data-domainsall="' + (u.domainsAll ? '1' : '0') + '" data-tabperms="' + escapeHtml(JSON.stringify(u.tabPermissions || {})) + '">' +
                 '<td>' + escapeHtml(u.username) + '</td>' +
                 '<td>' + emailDisplay + '</td>' +
                 '<td>' + escapeHtml(u.role) + '</td>' +
@@ -322,6 +371,9 @@
         $("#editMustChangePassword").prop("checked", row.attr("data-mustchange") === "1");
         $("#editDomainsAll").prop("checked", row.attr("data-domainsall") === "1");
         renderDomainCheckboxes("editDomainGrid", domains);
+        var tabperms = {};
+        try { tabperms = JSON.parse(row.attr("data-tabperms") || "{}"); } catch (e) { tabperms = {}; }
+        renderPermMatrix("editPermMatrix", tabperms);
         $("#editUserSection").show();
         $("#newUserSection").hide();
         $("#editRole").dropdown("set selected", row.attr("data-role"));
@@ -354,7 +406,8 @@
                 role: role,
                 mustChangePassword: mustChange,
                 domains: collectDomains("newDomainGrid"),
-                domainsAll: $("#newDomainsAll").is(":checked")
+                domainsAll: $("#newDomainsAll").is(":checked"),
+                tabPermissions: JSON.stringify(collectPermMatrix("newPermMatrix"))
             },
             success: function(data) {
                 if (data.error !== undefined) { msgbox(data.error, false); return; }
@@ -363,6 +416,7 @@
                 $("#newMustChangePassword").prop("checked", false);
                 $("#newDomainsAll").prop("checked", false);
                 renderDomainCheckboxes("newDomainGrid", []);
+                renderPermMatrix("newPermMatrix", {});
                 loadUsers();
             }
         });
@@ -380,7 +434,8 @@
                 role: $("#editRole").val(),
                 mustChangePassword: $("#editMustChangePassword").is(":checked"),
                 domains: collectDomains("editDomainGrid"),
-                domainsAll: $("#editDomainsAll").is(":checked")
+                domainsAll: $("#editDomainsAll").is(":checked"),
+                tabPermissions: JSON.stringify(collectPermMatrix("editPermMatrix"))
             },
             success: function(data) {
                 if (data.error !== undefined) { msgbox(data.error, false); return; }
@@ -539,6 +594,7 @@
     /* ============ INIT ============ */
     $(".tabular.menu .item").tab();
     renderPermissions("newPermGrid", []);
+    renderPermMatrix("newPermMatrix", {});
     loadProxyHosts();
     loadRoles(function() { loadUsers(); });
 </script>

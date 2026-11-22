@@ -90,6 +90,9 @@ func handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	domainsAll := r.FormValue("domainsAll") == "true" || r.FormValue("domainsAll") == "1"
 	_ = authAgent.SetUserDomainsAll(username, domainsAll)
 
+	//Permission matrix po jednotlivých záložkách (allow + viewOnly).
+	_ = authAgent.SetUserTabPermissions(username, parseTabPermissions(r))
+
 	authAgent.Logger.PrintAndLog("auth", "Admin created user "+username, nil)
 	utils.SendOK(w)
 }
@@ -160,6 +163,14 @@ func handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 		_ = authAgent.SetUserDomainsAll(username, all)
 	}
 
+	// Permission matrix po jednotlivých záložkách (allow + viewOnly).
+	if _, ok := r.Form["tabPermissions"]; ok {
+		if err := authAgent.SetUserTabPermissions(username, parseTabPermissions(r)); err != nil {
+			utils.SendErrorResponse(w, err.Error())
+			return
+		}
+	}
+
 	utils.SendOK(w)
 }
 
@@ -219,6 +230,18 @@ func parseDomains(r *http.Request) []string {
 		}
 	}
 	return out
+}
+
+// parseTabPermissions přečte permission matrix z POST parametru "tabPermissions",
+// který očekáváme jako JSON mapu: {"cert":{"allow":true,"viewOnly":false}, ...}.
+func parseTabPermissions(r *http.Request) map[string]auth.TabPermission {
+	perms := map[string]auth.TabPermission{}
+	raw := r.FormValue("tabPermissions")
+	if raw == "" {
+		return perms
+	}
+	_ = json.Unmarshal([]byte(raw), &perms)
+	return perms
 }
 
 // parsePermissions přečte oprávnění z POST parametru "permissions", který
