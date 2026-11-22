@@ -76,7 +76,8 @@ type UserInfo struct {
 	Email              string   `json:"email"`
 	Role               string   `json:"role"`
 	MustChangePassword bool     `json:"mustChangePassword"`
-	Domains            []string `json:"domains"` // konkrétní proxy domény, ke kterým má uživatel přístup
+	Domains            []string `json:"domains"`    // konkrétní proxy domény, ke kterým má uživatel přístup
+	DomainsAll         bool     `json:"domainsAll"` // true = uživatel vidí všechny domény (globální oprávnění)
 }
 
 func (a *AuthAgent) roleKey(name string) string {
@@ -427,6 +428,7 @@ func (a *AuthAgent) ListUserObjects() []UserInfo {
 			Role:               a.GetUserRole(username),
 			MustChangePassword: a.GetUserMustChangePassword(username),
 			Domains:            a.GetUserDomains(username),
+			DomainsAll:         a.GetUserDomainsAll(username),
 		})
 	}
 	return results
@@ -448,9 +450,13 @@ func (a *AuthAgent) SetUserDomains(username string, domains []string) error {
 }
 
 // UserCanAccessDomain zjistí, jestli uživatel smí vidět / spravovat danou
-// proxy doménu. Admin má přístup vždy, ostatní jen k přiřazeným doménám.
+// proxy doménu. Admin a uživatelé s globálním oprávněním (domainsAll) mají
+// přístup vždy, ostatní jen k přiřazeným doménám.
 func (a *AuthAgent) UserCanAccessDomain(username, host string) bool {
 	if a.GetUserRole(username) == DefaultRoleName {
+		return true
+	}
+	if a.GetUserDomainsAll(username) {
 		return true
 	}
 	for _, d := range a.GetUserDomains(username) {
@@ -459,6 +465,21 @@ func (a *AuthAgent) UserCanAccessDomain(username, host string) bool {
 		}
 	}
 	return false
+}
+
+// GetUserDomainsAll vrátí true, pokud má uživatel globální oprávnění vidět
+// všechny proxy domény (bez ohledu na konkrétní přiřazené domény).
+func (a *AuthAgent) GetUserDomainsAll(username string) bool {
+	var all bool
+	if err := a.Database.Read("auth", "domainsall/"+username, &all); err != nil {
+		return false
+	}
+	return all
+}
+
+// SetUserDomainsAll nastaví globální oprávnění vidět všechny proxy domény.
+func (a *AuthAgent) SetUserDomainsAll(username string, all bool) error {
+	return a.Database.Write("auth", "domainsall/"+username, all)
 }
 
 // CreateUserAccountFull vytvoří uživatele i s rolí a flagem povinné změny hesla.

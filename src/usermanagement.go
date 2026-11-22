@@ -86,6 +86,10 @@ func handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//Globální oprávnění vidět všechny domény.
+	domainsAll := r.FormValue("domainsAll") == "true" || r.FormValue("domainsAll") == "1"
+	_ = authAgent.SetUserDomainsAll(username, domainsAll)
+
 	authAgent.Logger.PrintAndLog("auth", "Admin created user "+username, nil)
 	utils.SendOK(w)
 }
@@ -148,6 +152,12 @@ func handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 			utils.SendErrorResponse(w, err.Error())
 			return
 		}
+	}
+
+	// Globální oprávnění vidět všechny domény
+	if values, ok := r.Form["domainsAll"]; ok && len(values) > 0 {
+		all := values[0] == "true" || values[0] == "1"
+		_ = authAgent.SetUserDomainsAll(username, all)
 	}
 
 	utils.SendOK(w)

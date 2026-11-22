@@ -678,6 +678,20 @@ func ReverseProxyHandleAddEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//Auto-přiřaď nově vytvořenou doménu uživateli, který ji vytvořil,
+	//aby na ni měl oprávnění (neplatí pro admina a uživatele s globálním přístupem).
+	creator, _ := authAgent.GetUsernameFromRequest(r)
+	if creator != "" && authAgent.GetUserRole(creator) != auth.DefaultRoleName && !authAgent.GetUserDomainsAll(creator) {
+		newHost := proxyEndpointCreated.RootOrMatchingDomain
+		if newHost != "" && newHost != "/" {
+			domains := authAgent.GetUserDomains(creator)
+			if !utils.StringInArray(domains, newHost) {
+				domains = append(domains, newHost)
+				_ = authAgent.SetUserDomains(creator, domains)
+			}
+		}
+	}
+
 	//Update utm if exists
 	UpdateUptimeMonitorTargets()
 
@@ -1811,27 +1825,16 @@ func ReverseProxyList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if eptype == "host" {
-		//Načti domény, ke kterým má aktuální uživatel přístup. Admin vidí vše.
+		//Načti domény, ke kterým má aktuální uživatel přístup.
 		username, _ := authAgent.GetUsernameFromRequest(r)
-		isAdmin := authAgent.GetUserRole(username) == auth.DefaultRoleName
-		allowedDomains := authAgent.GetUserDomains(username)
 
 		results := []*dynamicproxy.ProxyEndpoint{}
 		dynamicProxyRouter.ProxyEndpoints.Range(func(key, value interface{}) bool {
 			thisEndpoint := dynamicproxy.CopyEndpoint(value.(*dynamicproxy.ProxyEndpoint))
 
 			//Odfiltruj domény, na které uživatel nemá oprávnění.
-			if !isAdmin {
-				allowed := false
-				for _, d := range allowedDomains {
-					if d == thisEndpoint.RootOrMatchingDomain {
-						allowed = true
-						break
-					}
-				}
-				if !allowed {
-					return true //přeskoč
-				}
+			if !authAgent.UserCanAccessDomain(username, thisEndpoint.RootOrMatchingDomain) {
+				return true //přeskoč
 			}
 
 			//Clear the auth passwords before showing to front-end
